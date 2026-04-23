@@ -38,7 +38,6 @@ with col1:
 
 with col2:
     st.markdown("### Control por voz en tiempo real")
-    st.write("Comandos: abrir / cerrar / medio")
 
 # Estado del servo
 if "angulo" not in st.session_state:
@@ -46,16 +45,8 @@ if "angulo" not in st.session_state:
 
 st.markdown("### Estado del servo")
 
-# Visual simple tipo progreso
 st.progress(st.session_state.angulo / 100)
-st.write(f"Ángulo actual: {st.session_state.angulo}°")
-
-if st.session_state.angulo == 0:
-    st.success("ABIERTO")
-elif st.session_state.angulo == 90:
-    st.error("CERRADO")
-elif st.session_state.angulo == 45:
-    st.warning("POSICIÓN MEDIA")
+st.metric("Ángulo del servo", f"{st.session_state.angulo}°")
 
 st.write("Toca el botón y habla")
 
@@ -131,7 +122,7 @@ if col3.button("Cerrar"):
 st.markdown("## Cómo funciona con Wokwi")
 
 st.markdown("""
-1. Hablas usando el botón  
+1. Presionas el botón y hablas  
 2. El sistema interpreta el comando  
 3. Se envía un ángulo por MQTT  
 4. El ESP32 en Wokwi mueve el servo  
