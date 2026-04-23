@@ -11,55 +11,51 @@ import json
 from gtts import gTTS
 from googletrans import Translator
 
-def on_publish(client,userdata,result):             #create function for callback
+# ---------------- MQTT ----------------
+def on_publish(client, userdata, result):
     print("el dato ha sido publicado \n")
-    pass
 
 def on_message(client, userdata, message):
     global message_received
-    time.sleep(2)
-    message_received=str(message.payload.decode("utf-8"))
-    st.write(message_received)
+    message_received = str(message.payload.decode("utf-8"))
+    st.write("Mensaje recibido:", message_received)
 
-broker="broker.mqttdashboard.com"
-port=1883
-client1= paho.Client("GIT-HUBC")
+broker = "broker.mqttdashboard.com"
+port = 1883
+client1 = paho.Client("GIT-HUBC")
 client1.on_message = on_message
 
-
-
+# ---------------- UI ----------------
 st.title("INTERFACES MULTIMODALES")
-st.subheader("CONTROL POR VOZ")
+st.subheader("CONTROL POR VOZ + RESPUESTA")
 
 image = Image.open('voice_ctrl.jpg')
-
 st.image(image, width=200)
 
+st.write("Toca el botón y habla")
 
+# Historial en sesión
+if "historial" not in st.session_state:
+    st.session_state.historial = []
 
+# Selector de idioma
+idioma = st.selectbox("Traducir a:", ["es", "en", "fr", "de"])
 
-st.write("Toca el Botón y habla ")
-
-stt_button = Button(label=" Inicio ", width=200)
+stt_button = Button(label="Inicio", width=200)
 
 stt_button.js_on_event("button_click", CustomJS(code="""
     var recognition = new webkitSpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
- 
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
     recognition.onresult = function (e) {
-        var value = "";
-        for (var i = e.resultIndex; i < e.results.length; ++i) {
-            if (e.results[i].isFinal) {
-                value += e.results[i][0].transcript;
-            }
-        }
-        if ( value != "") {
+        var value = e.results[0][0].transcript;
+        if (value != "") {
             document.dispatchEvent(new CustomEvent("GET_TEXT", {detail: value}));
         }
     }
     recognition.start();
-    """))
+"""))
 
 result = streamlit_bokeh_events(
     stt_button,
@@ -67,18 +63,44 @@ result = streamlit_bokeh_events(
     key="listen",
     refresh_on_update=False,
     override_height=75,
-    debounce_time=0)
+    debounce_time=0
+)
 
-if result:
-    if "GET_TEXT" in result:
-        st.write(result.get("GET_TEXT"))
-        client1.on_publish = on_publish                            
-        client1.connect(broker,port)  
-        message =json.dumps({"Act1":result.get("GET_TEXT").strip()})
-        ret= client1.publish("voice_ctrl", message)
+# ---------------- Lógica principal ----------------
+if result and "GET_TEXT" in result:
 
-    
-    try:
+    texto = result.get("GET_TEXT").strip()
+    st.write("Texto detectado:", texto)
+
+    # Guardar historial
+    st.session_state.historial.append(texto)
+
+    # Traducción
+    translator = Translator()
+    traduccion = translator.translate(texto, dest=idioma).text
+
+    st.write("Traducción:", traduccion)
+
+    # Enviar por MQTT
+    client1.on_publish = on_publish
+    client1.connect(broker, port)
+    message = json.dumps({"Act1": texto})
+    client1.publish("voice_ctrl", message)
+
+    # Generar audio
+    tts = gTTS(traduccion, lang=idioma)
+    if not os.path.exists("temp"):
         os.mkdir("temp")
-    except:
-        pass
+
+    audio_path = "temp/audio.mp3"
+    tts.save(audio_path)
+
+    # Reproducir audio
+    audio_file = open(audio_path, 'rb')
+    audio_bytes = audio_file.read()
+    st.audio(audio_bytes, format='audio/mp3')
+
+# ---------------- Historial ----------------
+st.subheader("Historial de comandos")
+for i, cmd in enumerate(reversed(st.session_state.historial)):
+    st.write(f"{i+1}. {cmd}")
