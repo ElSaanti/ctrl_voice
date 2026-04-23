@@ -5,42 +5,53 @@ from bokeh.models import CustomJS
 from streamlit_bokeh_events import streamlit_bokeh_events
 from PIL import Image
 import time
-import glob
 import paho.mqtt.client as paho
 import json
-from gtts import gTTS
-from googletrans import Translator
 
 # ---------------- MQTT ----------------
 def on_publish(client, userdata, result):
-    print("el dato ha sido publicado \n")
+    print("el dato ha sido publicado")
 
 def on_message(client, userdata, message):
-    global message_received
-    message_received = str(message.payload.decode("utf-8"))
-    st.write("Mensaje recibido:", message_received)
+    global estado_led
+    msg = str(message.payload.decode("utf-8"))
+    st.write("Respuesta desde Wokwi:", msg)
+
+    if "ON" in msg:
+        estado_led = "ENCENDIDO"
+    elif "OFF" in msg:
+        estado_led = "APAGADO"
 
 broker = "broker.mqttdashboard.com"
 port = 1883
+topic = "voice_ctrl"
+
 client1 = paho.Client("GIT-HUBC")
 client1.on_message = on_message
+client1.connect(broker, port)
+client1.subscribe(topic)
 
 # ---------------- UI ----------------
 st.title("INTERFACES MULTIMODALES")
-st.subheader("CONTROL POR VOZ + RESPUESTA")
+st.subheader("CONTROL POR VOZ + WOKWI")
 
 image = Image.open('voice_ctrl.jpg')
 st.image(image, width=200)
 
+# Estado visual
+if "estado_led" not in st.session_state:
+    st.session_state.estado_led = "APAGADO"
+
+st.markdown("### Estado del dispositivo")
+
+if st.session_state.estado_led == "ENCENDIDO":
+    st.success("LED ENCENDIDO")
+else:
+    st.error("LED APAGADO")
+
 st.write("Toca el botón y habla")
 
-# Historial en sesión
-if "historial" not in st.session_state:
-    st.session_state.historial = []
-
-# Selector de idioma
-idioma = st.selectbox("Traducir a:", ["es", "en", "fr", "de"])
-
+# ---------------- BOTÓN VOZ ----------------
 stt_button = Button(label="Inicio", width=200)
 
 stt_button.js_on_event("button_click", CustomJS(code="""
@@ -66,41 +77,48 @@ result = streamlit_bokeh_events(
     debounce_time=0
 )
 
-# ---------------- Lógica principal ----------------
+# ---------------- PROCESAMIENTO ----------------
 if result and "GET_TEXT" in result:
+    texto = result.get("GET_TEXT").strip().lower()
+    st.write("Comando:", texto)
 
-    texto = result.get("GET_TEXT").strip()
-    st.write("Texto detectado:", texto)
-
-    # Guardar historial
-    st.session_state.historial.append(texto)
-
-    # Traducción
-    translator = Translator()
-    traduccion = translator.translate(texto, dest=idioma).text
-
-    st.write("Traducción:", traduccion)
-
-    # Enviar por MQTT
     client1.on_publish = on_publish
-    client1.connect(broker, port)
-    message = json.dumps({"Act1": texto})
-    client1.publish("voice_ctrl", message)
 
-    # Generar audio
-    tts = gTTS(traduccion, lang=idioma)
-    if not os.path.exists("temp"):
-        os.mkdir("temp")
+    # Interpretación simple
+    if "encender" in texto:
+        mensaje = "ON"
+        st.session_state.estado_led = "ENCENDIDO"
+    elif "apagar" in texto:
+        mensaje = "OFF"
+        st.session_state.estado_led = "APAGADO"
+    else:
+        mensaje = texto
 
-    audio_path = "temp/audio.mp3"
-    tts.save(audio_path)
+    payload = json.dumps({"cmd": mensaje})
+    client1.publish(topic, payload)
 
-    # Reproducir audio
-    audio_file = open(audio_path, 'rb')
-    audio_bytes = audio_file.read()
-    st.audio(audio_bytes, format='audio/mp3')
+# ---------------- BOTONES MANUALES ----------------
+st.markdown("### Control manual")
 
-# ---------------- Historial ----------------
-st.subheader("Historial de comandos")
-for i, cmd in enumerate(reversed(st.session_state.historial)):
-    st.write(f"{i+1}. {cmd}")
+col1, col2 = st.columns(2)
+
+if col1.button("Encender"):
+    client1.publish(topic, json.dumps({"cmd": "ON"}))
+    st.session_state.estado_led = "ENCENDIDO"
+
+if col2.button("Apagar"):
+    client1.publish(topic, json.dumps({"cmd": "OFF"}))
+    st.session_state.estado_led = "APAGADO"
+
+# ---------------- INSTRUCCIONES ----------------
+st.markdown("## Cómo conectarlo con Wokwi")
+
+st.markdown("""
+1. Abre Wokwi y crea un proyecto con ESP32  
+2. Agrega un LED al pin 2  
+3. Usa la librería WiFi y PubSubClient  
+4. Conéctate al broker: broker.mqttdashboard.com  
+5. Suscríbete al topic: voice_ctrl  
+6. Si recibes "ON" → enciende LED  
+7. Si recibes "OFF" → apaga LED  
+""")
