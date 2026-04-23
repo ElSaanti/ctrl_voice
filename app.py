@@ -13,14 +13,8 @@ def on_publish(client, userdata, result):
     print("el dato ha sido publicado")
 
 def on_message(client, userdata, message):
-    global estado_led
     msg = str(message.payload.decode("utf-8"))
     st.write("Respuesta desde Wokwi:", msg)
-
-    if "ON" in msg:
-        estado_led = "ENCENDIDO"
-    elif "OFF" in msg:
-        estado_led = "APAGADO"
 
 broker = "broker.mqttdashboard.com"
 port = 1883
@@ -33,21 +27,35 @@ client1.subscribe(topic)
 
 # ---------------- UI ----------------
 st.title("INTERFACES MULTIMODALES")
-st.subheader("CONTROL POR VOZ + WOKWI")
+st.subheader("CONTROL POR VOZ + SERVO (WOKWI)")
 
 image = Image.open('voice_ctrl.jpg')
-st.image(image, width=200)
 
-# Estado visual
-if "estado_led" not in st.session_state:
-    st.session_state.estado_led = "APAGADO"
+col1, col2 = st.columns(2)
 
-st.markdown("### Estado del dispositivo")
+with col1:
+    st.image(image, width=200)
 
-if st.session_state.estado_led == "ENCENDIDO":
-    st.success("LED ENCENDIDO")
-else:
-    st.error("LED APAGADO")
+with col2:
+    st.markdown("### Control por voz en tiempo real")
+    st.write("Comandos: abrir / cerrar / medio")
+
+# Estado del servo
+if "angulo" not in st.session_state:
+    st.session_state.angulo = 0
+
+st.markdown("### Estado del servo")
+
+# Visual simple tipo progreso
+st.progress(st.session_state.angulo / 100)
+st.write(f"Ángulo actual: {st.session_state.angulo}°")
+
+if st.session_state.angulo == 0:
+    st.success("ABIERTO")
+elif st.session_state.angulo == 90:
+    st.error("CERRADO")
+elif st.session_state.angulo == 45:
+    st.warning("POSICIÓN MEDIA")
 
 st.write("Toca el botón y habla")
 
@@ -84,15 +92,20 @@ if result and "GET_TEXT" in result:
 
     client1.on_publish = on_publish
 
-    # Interpretación simple
-    if "encender" in texto:
-        mensaje = "ON"
-        st.session_state.estado_led = "ENCENDIDO"
-    elif "apagar" in texto:
-        mensaje = "OFF"
-        st.session_state.estado_led = "APAGADO"
+    if "abrir" in texto:
+        mensaje = "0"
+        st.session_state.angulo = 0
+
+    elif "cerrar" in texto:
+        mensaje = "90"
+        st.session_state.angulo = 90
+
+    elif "medio" in texto:
+        mensaje = "45"
+        st.session_state.angulo = 45
+
     else:
-        mensaje = texto
+        mensaje = "0"
 
     payload = json.dumps({"cmd": mensaje})
     client1.publish(topic, payload)
@@ -100,25 +113,26 @@ if result and "GET_TEXT" in result:
 # ---------------- BOTONES MANUALES ----------------
 st.markdown("### Control manual")
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
-if col1.button("Encender"):
-    client1.publish(topic, json.dumps({"cmd": "ON"}))
-    st.session_state.estado_led = "ENCENDIDO"
+if col1.button("Abrir"):
+    client1.publish(topic, json.dumps({"cmd": "0"}))
+    st.session_state.angulo = 0
 
-if col2.button("Apagar"):
-    client1.publish(topic, json.dumps({"cmd": "OFF"}))
-    st.session_state.estado_led = "APAGADO"
+if col2.button("Medio"):
+    client1.publish(topic, json.dumps({"cmd": "45"}))
+    st.session_state.angulo = 45
+
+if col3.button("Cerrar"):
+    client1.publish(topic, json.dumps({"cmd": "90"}))
+    st.session_state.angulo = 90
 
 # ---------------- INSTRUCCIONES ----------------
-st.markdown("## Cómo conectarlo con Wokwi")
+st.markdown("## Cómo funciona con Wokwi")
 
 st.markdown("""
-1. Abre Wokwi y crea un proyecto con ESP32  
-2. Agrega un LED al pin 2  
-3. Usa la librería WiFi y PubSubClient  
-4. Conéctate al broker: broker.mqttdashboard.com  
-5. Suscríbete al topic: voice_ctrl  
-6. Si recibes "ON" → enciende LED  
-7. Si recibes "OFF" → apaga LED  
+1. Hablas usando el botón  
+2. El sistema interpreta el comando  
+3. Se envía un ángulo por MQTT  
+4. El ESP32 en Wokwi mueve el servo  
 """)
