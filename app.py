@@ -101,23 +101,6 @@ if result and "GET_TEXT" in result:
     payload = json.dumps({"cmd": mensaje})
     client1.publish(topic, payload)
 
-# ---------------- BOTONES MANUALES ----------------
-st.markdown("### Control manual")
-
-col1, col2, col3 = st.columns(3)
-
-if col1.button("Abrir"):
-    client1.publish(topic, json.dumps({"cmd": "0"}))
-    st.session_state.angulo = 0
-
-if col2.button("Medio"):
-    client1.publish(topic, json.dumps({"cmd": "45"}))
-    st.session_state.angulo = 45
-
-if col3.button("Cerrar"):
-    client1.publish(topic, json.dumps({"cmd": "90"}))
-    st.session_state.angulo = 90
-
 # ---------------- INSTRUCCIONES ----------------
 st.markdown("## Cómo funciona con Wokwi")
 
